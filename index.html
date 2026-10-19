@@ -18,6 +18,7 @@
     }
     #msg { color: #e8a49b; min-height: 1.4em; }
   </style>
+  <script src="./vendor/jsqr/jsQR.js"></script>
   <script type="importmap">
   { "imports": {
       "three": "./vendor/three/three.module.js",
@@ -45,10 +46,12 @@
 
     // One shared page for every card: the QR link names the card (?card=<id>), and its tracking
     // data and cube colors load from cards/<id>/. A bare link opens willmore's card.
+    const ID = /^[a-z0-9-]{1,40}$/;
     const param = new URLSearchParams(location.search).get('card') || 'willmore';
-    const cardId = /^[a-z0-9-]{1,40}$/.test(param) ? param : 'willmore';
+    let cardId = ID.test(param) ? param : 'willmore';
     const cardDir = `./cards/${cardId}`;
-    const card = await fetch(`${cardDir}/card.json`).then(r => r.ok ? r.json() : null).catch(() => null);
+    const loadCard = id => fetch(`./cards/${id}/card.json`).then(r => r.ok ? r.json() : null).catch(() => null);
+    const card = await loadCard(cardId);
     if (!card) {
       document.querySelector('#start p').textContent = 'This card could not be found. Check the QR code and try again.';
       document.querySelector('#go').remove();
@@ -57,7 +60,7 @@
 
     const mindar = new MindARThree({
       container: document.querySelector('#ar'),
-      imageTargetSrc: /^[a-z0-9-]{1,40}$/.test(card.track || "") ? `./tracks/${card.track}.mind` : `${cardDir}/card.mind`,
+      imageTargetSrc: ID.test(card.track || '') ? `./tracks/${card.track}.mind` : `${cardDir}/card.mind`,
       filterMinCF: 0.0005,
       filterBeta: 0.01,
       uiLoading: 'yes', uiScanning: 'yes', uiError: 'yes',
@@ -116,6 +119,45 @@
       shadow.material.opacity = 0.35 + 0.5 * s;
     };
 
+    // Keep reading the QR code in view, so the cube matches the card the camera sees, not just the
+    // card whose link opened the page. A card in the same group (same tracking file) swaps its cube
+    // in place; any other card reloads the page for that card.
+    const qrCanvas = document.createElement('canvas');
+    const qrCtx = qrCanvas.getContext('2d', { willReadFrequently: true });
+    let lastRead = null;
+    const cardIdFromQr = text => {
+      try {
+        const url = new URL(text, location.href);
+        if (url.origin !== location.origin || url.pathname.replace(/index\.html$/, '') !== location.pathname.replace(/index\.html$/, '')) return null;
+        const id = url.searchParams.get('card') || 'willmore';
+        return ID.test(id) ? id : null;
+      } catch { return null; }
+    };
+    const checkQr = async () => {
+      const video = mindar.video;
+      if (!video || !video.videoWidth) return;
+      const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight));
+      qrCanvas.width = Math.round(video.videoWidth * scale);
+      qrCanvas.height = Math.round(video.videoHeight * scale);
+      qrCtx.drawImage(video, 0, 0, qrCanvas.width, qrCanvas.height);
+      const img = qrCtx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
+      const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+      const id = code && cardIdFromQr(code.data);
+      // Act only when the same new card is read twice in a row, so a misread can't flip the cube
+      const confirmed = id && id !== cardId && id === lastRead;
+      lastRead = id;
+      if (!confirmed) return;
+      const next = await loadCard(id);
+      if (!next) return;
+      cardId = id;
+      history.replaceState(null, '', `?card=${id}`);
+      if (next.track && next.track === card.track) {
+        (next.cube || []).forEach((c, i) => faces[i] && faces[i].color.set(c));
+      } else {
+        location.replace(`?card=${id}&autostart`);
+      }
+    };
+
     const startEl = document.querySelector('#start'), msg = document.querySelector('#msg');
     document.querySelector('#go').addEventListener('click', async () => {
       msg.textContent = '';
@@ -123,6 +165,7 @@
         await mindar.start();
         startEl.remove();
         renderer.setAnimationLoop(() => { animate(); renderer.render(scene, camera); });
+        setInterval(() => checkQr().catch(console.error), 700);
       } catch (e) {
         msg.textContent = 'Could not open the camera. Check camera permission and try again.';
         console.error(e);

@@ -1,0 +1,3 @@
+{"name": "Sam", "title": "Engineer", "lines": ["sam@example.com", "+1 555 222 3333", "example.com"],
+ "seed": 20261019, "track": "demo-co", "url": "https://willmore-pixel.github.io/AR-card/?card=co-sam",
+ "cube": ["#151515", "#151515", "#151515", "#151515", "#151515", "#151515"]}
