@@ -142,10 +142,9 @@
       return new THREE.Mesh(new THREE.PlaneGeometry(width, width * ch / cw), mat);
     };
 
-    let item;
-    if (neon) {
-      item = await makeNeon();
-    } else {
+    let item = null;
+    if (neon) item = await makeNeon().catch(e => { console.error('neon image failed, showing a cube', e); return null; });
+    if (!item) {
       const geo = new THREE.BoxGeometry(CUBE, CUBE, CUBE);
       item = new THREE.Mesh(geo, faces);
       item.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat));

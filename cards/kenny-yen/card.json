@@ -20,9 +20,9 @@
   "edge": "#FFFFFF",
   "object": {
     "type": "neon",
-    "src": "assets/pacewing/mark-white.png",
+    "src": "assets/pacewing/suit-neon.svg",
     "color": "#6FE3FF",
-    "size_mm": 26,
+    "size_mm": 28,
     "spin": {
       "period": 6.5,
       "turn": 3
