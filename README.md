@@ -10,6 +10,10 @@ One shared page serves every card. Each card's QR code links to `https://willmor
 2. Run `python3 tools/build_card.py <id>`. It writes `cards/<id>/card.mind` and `target.png` for the page, and print files (SVG, 600 dpi PNG, PDF with 3 mm bleed, preview) to `print/<id>/`.
 3. Commit `cards/<id>/` and push.
 
+## Company looks
+
+An optional `"theme"` in `card.json` restyles the card: background, confetti colors and shapes (including tailoring motifs `button`, `stitch`, `cross`, `needle`), panel position, fonts, and a logo image kept clear of confetti. `"edge"` sets the cube's edge color. See `cards/kenny-yen/card.json` (Pacewing Bespoke).
+
 ## Cards that share one design (a company pattern)
 
 Give every member's `card.json` the same `seed` and the same `"track": "<group>"`, and their own `url` and `cube` colors. The first build trains `tracks/<group>.mind` on the shared design only (QR code and personal text left out), and later builds reuse it, so add `--retrain` after changing the shared design. Each person's QR link picks their own cube. While running, the page keeps reading the QR code in view (vendored jsQR) and switches to that card's cube, so pointing the phone at a colleague's card shows their cube. A card from another group reloads the page for that card.

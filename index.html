@@ -96,11 +96,12 @@
 
     // Cube with one card-palette color per face, resting on the QR code
     const faces = (card.cube || ['#2F7F7A', '#2F7F7A', '#B5473A', '#B5473A', '#D9A441', '#5E7F3A'])
-      .map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55 }));
+      .map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, emissive: c, emissiveIntensity: 0.3 }));
     const geo = new THREE.BoxGeometry(CUBE, CUBE, CUBE);
     const cube = new THREE.Mesh(geo, faces);
     cube.position.z = CUBE / 2;
-    cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: '#1F2A2E' })));
+    const edgeMat = new THREE.LineBasicMaterial({ color: card.edge || '#1F2A2E' });
+    cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat));
     model.add(cube);
 
     // Float above the QR code with a gentle bob. Every 6 s the cube makes one slow, eased turn
@@ -152,7 +153,8 @@
       cardId = id;
       history.replaceState(null, '', `?card=${id}`);
       if (next.track && next.track === card.track) {
-        (next.cube || []).forEach((c, i) => faces[i] && faces[i].color.set(c));
+        (next.cube || []).forEach((c, i) => { if (faces[i]) { faces[i].color.set(c); faces[i].emissive.set(c); } });
+        edgeMat.color.set(next.edge || '#1F2A2E');
       } else {
         location.replace(`?card=${id}&autostart`);
       }
