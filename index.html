@@ -43,9 +43,21 @@
     const QR_CENTER_Y = (CARD_H / 2 - 22) / CARD_W;
     const CUBE = 18 / CARD_W;
 
+    // One shared page for every card: the QR link names the card (?card=<id>), and its tracking
+    // data and cube colors load from cards/<id>/. A bare link opens willmore's card.
+    const param = new URLSearchParams(location.search).get('card') || 'willmore';
+    const cardId = /^[a-z0-9-]{1,40}$/.test(param) ? param : 'willmore';
+    const cardDir = `./cards/${cardId}`;
+    const card = await fetch(`${cardDir}/card.json`).then(r => r.ok ? r.json() : null).catch(() => null);
+    if (!card) {
+      document.querySelector('#start p').textContent = 'This card could not be found. Check the QR code and try again.';
+      document.querySelector('#go').remove();
+      throw new Error(`unknown card ${cardId}`);
+    }
+
     const mindar = new MindARThree({
       container: document.querySelector('#ar'),
-      imageTargetSrc: './card.mind',
+      imageTargetSrc: `${cardDir}/card.mind`,
       filterMinCF: 0.0005,
       filterBeta: 0.01,
       uiLoading: 'yes', uiScanning: 'yes', uiError: 'yes',
@@ -80,7 +92,7 @@
     model.add(shadow);
 
     // Cube with one card-palette color per face, resting on the QR code
-    const faces = ['#2F7F7A', '#2F7F7A', '#B5473A', '#B5473A', '#D9A441', '#5E7F3A']
+    const faces = (card.cube || ['#2F7F7A', '#2F7F7A', '#B5473A', '#B5473A', '#D9A441', '#5E7F3A'])
       .map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55 }));
     const geo = new THREE.BoxGeometry(CUBE, CUBE, CUBE);
     const cube = new THREE.Mesh(geo, faces);
