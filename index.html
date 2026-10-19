@@ -88,14 +88,17 @@
     cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: '#1F2A2E' })));
     model.add(cube);
 
-    // Float above the QR code with a gentle bob, spinning one full turn every 6 s around the card's normal
-    const SPIN_PERIOD = 6, HOVER = CUBE * 0.6, BOB = CUBE * 0.12, BOB_PERIOD = 3;
+    // Float above the QR code with a gentle bob. Every 6 s the cube makes one slow, eased turn
+    // around the card's normal, then rests until the next cycle.
+    const SPIN_PERIOD = 6, SPIN_TIME = 2.5, HOVER = CUBE * 0.6, BOB = CUBE * 0.12, BOB_PERIOD = 3;
+    const ease = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
     const clock = new THREE.Clock();
     const animate = () => {
       const t = clock.getElapsedTime();
       const lift = HOVER + BOB * Math.sin(t * 2 * Math.PI / BOB_PERIOD);
       cube.position.z = CUBE / 2 + lift;
-      cube.rotation.z = t * 2 * Math.PI / SPIN_PERIOD;
+      const phase = Math.min((t % SPIN_PERIOD) / SPIN_TIME, 1);
+      cube.rotation.z = (Math.floor(t / SPIN_PERIOD) + ease(phase)) * 2 * Math.PI;
       const s = 1 - 0.35 * lift / (HOVER + BOB);
       shadow.scale.set(s, s, 1);
       shadow.material.opacity = 0.35 + 0.5 * s;
