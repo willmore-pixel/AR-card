@@ -129,8 +129,12 @@
       const out = document.createElement('canvas'); out.width = cw; out.height = ch;
       const g = out.getContext('2d');
       g.shadowColor = neonColor;
-      for (const [blur, alpha] of [[90, 0.9], [45, 0.9], [18, 1], [6, 1]]) {
-        g.globalAlpha = alpha; g.shadowBlur = blur; g.drawImage(colored, 0, 0);
+      // "glow" scales the blur radius and strength (1 = the original look, 0 = no glow)
+      const glow = obj.glow ?? 1;
+      if (glow > 0) {
+        for (const [blur, alpha] of [[90, 0.9], [45, 0.9], [18, 1], [6, 1]]) {
+          g.globalAlpha = Math.min(1, alpha * glow); g.shadowBlur = blur * Math.max(glow, 0.15); g.drawImage(colored, 0, 0);
+        }
       }
       g.shadowBlur = 0; g.globalAlpha = 1;
       g.drawImage(core, 0, 0);
@@ -171,39 +175,47 @@
       return holder;
     };
 
-    let item = null;
+    let item = null, base = CUBE / 2;
     if (neon) item = await makeNeon().catch(e => { console.error('neon image failed, showing a cube', e); return null; });
     if (!item) {
-      const geo = new THREE.BoxGeometry(CUBE, CUBE, CUBE);
+      // "size_mm" sizes a cube too (default 18 mm); a neon sign that failed to load falls back to the default size
+      const k = neon ? CUBE : (obj.size_mm || 18) / CARD_W;
+      const geo = new THREE.BoxGeometry(k, k, k);
       item = new THREE.Mesh(geo, faces);
       item.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat));
+      base = k / 2;
     }
-    item.position.z = CUBE / 2;
+    item.position.z = base;
     model.add(item);
 
     // Float above the QR code with a gentle bob. Each cycle the object makes one slow, eased turn,
     // then rests, turning around the card's normal (the axis pointing straight out of the card).
     // card.json "spin": {"period": s, "turn": s} sets the rhythm (default 6 s cycle, 2.5 s turn).
     const SPIN_PERIOD = (obj.spin && obj.spin.period) || 6, SPIN_TIME = (obj.spin && obj.spin.turn) || 2.5;
-    const HOVER = CUBE * 0.6, BOB = CUBE * 0.12, BOB_PERIOD = 3;
+    // "hover_mm" / "bob_mm" set how high it floats and how far it bobs (default 10.8 and 2.16 mm);
+    // "flicker" scales how often the neon flickers and "spill" its light on the card (1 = default, 0 = off)
+    const HOVER = (obj.hover_mm ?? 10.8) / CARD_W, BOB = (obj.bob_mm ?? 2.16) / CARD_W, BOB_PERIOD = 3;
+    const FLICKER = obj.flicker ?? 1, SPILL = obj.spill ?? 1;
     const ease = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
     const clock = new THREE.Clock();
-    let flickerUntil = 0;
+    let flickerUntil = 0, lastT = 0;
     const animate = () => {
       const t = clock.getElapsedTime();
       const lift = HOVER + BOB * Math.sin(t * 2 * Math.PI / BOB_PERIOD);
-      item.position.z = CUBE / 2 + lift;
+      item.position.z = base + lift;
       const phase = Math.min((t % SPIN_PERIOD) / SPIN_TIME, 1);
       const angle = (Math.floor(t / SPIN_PERIOD) + ease(phase)) * 2 * Math.PI;
       item.rotation.z = angle;
-      const s = 1 - 0.35 * lift / (HOVER + BOB);
+      const s = 1 - 0.35 * lift / Math.max(0.0001, HOVER + BOB);
+      const dt = t - lastT; lastT = t;
       shadow.scale.set(s, s, 1);
       if (neon) {
         // Steady glow with the odd quick neon flicker
-        if (t > flickerUntil && Math.random() < 0.004) flickerUntil = t + 0.18;
+        // About one flicker every 4 s at flicker 1, whatever the frame rate
+        if (t > flickerUntil && Math.random() < 1 - Math.pow(1 - Math.min(1, 0.004 * FLICKER), dt * 60)) flickerUntil = t + 0.18;
         const f = t < flickerUntil ? 0.35 + 0.65 * Math.random() : 1;
         item.userData.glow.opacity = f;
-        shadow.material.opacity = (0.35 + 0.3 * s) * f;
+        shadow.material.opacity = (0.35 + 0.3 * s) * f * SPILL;
       } else {
         shadow.material.opacity = 0.35 + 0.5 * s;
       }
@@ -241,7 +253,7 @@
       if (!next) return;
       cardId = id;
       history.replaceState(null, '', `?card=${id}`);
-      if (next.track && next.track === card.track && !neon && !(next.object && next.object.type === 'neon')) {
+      if (next.track && next.track === card.track && !neon && !next.object && !card.object) {
         (next.cube || []).forEach((c, i) => { if (faces[i]) { faces[i].color.set(c); faces[i].emissive.set(c); } });
         edgeMat.color.set(next.edge || '#1F2A2E');
       } else {
