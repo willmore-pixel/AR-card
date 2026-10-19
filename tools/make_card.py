@@ -1,8 +1,12 @@
 """Generate an AR business card front as SVG (mm units, 3 mm bleed) from a card.json config.
 
-Usage: make_card.py cards/<id>/card.json out.svg
+Usage: make_card.py cards/<id>/card.json out.svg [--shared-only]
+
+--shared-only leaves out the QR code and the person's text, keeping only what every card
+in a group shares. Group tracking (tracks/<group>.mind) is trained on that image so it
+matches every member's card equally.
 """
-import html, json, math, random, sys
+import html, json, math, random, re, sys
 import segno
 
 CFG = json.load(open(sys.argv[1]))
@@ -124,5 +128,9 @@ svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{W}mm" height="{H}mm" v
   </g>
 </svg>
 '''
+if "--shared-only" in sys.argv:
+    svg = re.sub(r'\s*<path id="qr-code"[^>]*/>', "", svg)
+    panel = svg[svg.index('<g id="contact-panel">'):]
+    svg = svg.replace(panel, re.sub(r'\s*<text [^>]*>[^<]*</text>', "", panel))
 open(OUT, "w").write(svg)
 print("modules", n, "module mm", round(mod, 3), "shapes", len(shapes))

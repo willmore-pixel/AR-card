@@ -57,7 +57,7 @@
 
     const mindar = new MindARThree({
       container: document.querySelector('#ar'),
-      imageTargetSrc: `${cardDir}/card.mind`,
+      imageTargetSrc: /^[a-z0-9-]{1,40}$/.test(card.track || "") ? `./tracks/${card.track}.mind` : `${cardDir}/card.mind`,
       filterMinCF: 0.0005,
       filterBeta: 0.01,
       uiLoading: 'yes', uiScanning: 'yes', uiError: 'yes',
