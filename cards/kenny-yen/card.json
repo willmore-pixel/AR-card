@@ -21,7 +21,11 @@
   "object": {
     "type": "neon",
     "src": "assets/pacewing/suit-neon.svg",
-    "color": "#6FE3FF",
+    "color": "#FFC845",
+    "core": "#FFF6D6",
+    "side": "#B07A1E",
+    "upright": true,
+    "depth_mm": 2,
     "size_mm": 28,
     "spin": {
       "period": 6.5,

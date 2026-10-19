@@ -136,10 +136,39 @@
       g.drawImage(core, 0, 0);
       const tex = new THREE.CanvasTexture(out);
       tex.colorSpace = THREE.SRGBColorSpace;
-      const width = (obj.size_mm || 26) / CARD_W * (1 + 2 * pad);
+      const width = (obj.size_mm || 26) / CARD_W * (1 + 2 * pad), height = width * ch / cw;
       // Normal (not additive) blending so the glow still shows over the white QR plate
-      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
-      return new THREE.Mesh(new THREE.PlaneGeometry(width, width * ch / cw), mat);
+      const glowMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+      const plane = new THREE.PlaneGeometry(width, height);
+      const sign = new THREE.Group();
+      // "depth_mm" gives the sign thickness: solid silhouettes of the drawing stacked between its two glowing faces
+      const depth = (obj.depth_mm || 0) / CARD_W;
+      if (depth > 0) {
+        const sideTex = new THREE.CanvasTexture(tint(obj.side || neonColor));
+        sideTex.colorSpace = THREE.SRGBColorSpace;
+        const sideMat = new THREE.MeshBasicMaterial({ map: sideTex, alphaTest: 0.5, side: THREE.DoubleSide });
+        const n = Math.max(2, Math.round(obj.depth_mm * 8));
+        for (let i = 0; i < n; i++) {
+          const layer = new THREE.Mesh(plane, sideMat);
+          layer.position.z = -depth / 2 + depth * i / (n - 1);
+          sign.add(layer);
+        }
+      }
+      for (const z of depth > 0 ? [depth / 2, -depth / 2] : [0]) {
+        const face = new THREE.Mesh(plane, glowMat);
+        face.position.z = z;
+        sign.add(face);
+      }
+      sign.userData.glow = glowMat;
+      if (!obj.upright) return sign;
+      // "upright": stand the drawing up so its top points along the spin axis (the card's normal),
+      // with the bottom of the drawing where the cube's bottom would be
+      sign.rotation.x = Math.PI / 2;
+      sign.position.z = height * h / ch / 2 - CUBE / 2;
+      const holder = new THREE.Group();
+      holder.add(sign);
+      holder.userData.glow = glowMat;
+      return holder;
     };
 
     let item = null;
@@ -173,7 +202,7 @@
         // Steady glow with the odd quick neon flicker
         if (t > flickerUntil && Math.random() < 0.004) flickerUntil = t + 0.18;
         const f = t < flickerUntil ? 0.35 + 0.65 * Math.random() : 1;
-        item.material.opacity = f;
+        item.userData.glow.opacity = f;
         shadow.material.opacity = (0.35 + 0.3 * s) * f;
       } else {
         shadow.material.opacity = 0.35 + 0.5 * s;
