@@ -88,13 +88,26 @@
     cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: '#1F2A2E' })));
     model.add(cube);
 
+    // Float above the QR code with a gentle bob, spinning one full turn every 6 s around the card's normal
+    const SPIN_PERIOD = 6, HOVER = CUBE * 0.6, BOB = CUBE * 0.12, BOB_PERIOD = 3;
+    const clock = new THREE.Clock();
+    const animate = () => {
+      const t = clock.getElapsedTime();
+      const lift = HOVER + BOB * Math.sin(t * 2 * Math.PI / BOB_PERIOD);
+      cube.position.z = CUBE / 2 + lift;
+      cube.rotation.z = t * 2 * Math.PI / SPIN_PERIOD;
+      const s = 1 - 0.35 * lift / (HOVER + BOB);
+      shadow.scale.set(s, s, 1);
+      shadow.material.opacity = 0.35 + 0.5 * s;
+    };
+
     const startEl = document.querySelector('#start'), msg = document.querySelector('#msg');
     document.querySelector('#go').addEventListener('click', async () => {
       msg.textContent = '';
       try {
         await mindar.start();
         startEl.remove();
-        renderer.setAnimationLoop(() => renderer.render(scene, camera));
+        renderer.setAnimationLoop(() => { animate(); renderer.render(scene, camera); });
       } catch (e) {
         msg.textContent = 'Could not open the camera. Check camera permission and try again.';
         console.error(e);
