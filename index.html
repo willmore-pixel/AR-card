@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>AR Card</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #1F2A2E; font-family: Inter, system-ui, sans-serif; }
+    #ar { position: fixed; inset: 0; }
+    #start {
+      position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 18px; padding: 24px; text-align: center; color: #F4EEDF; background: #1F2A2E;
+    }
+    #start h1 { margin: 0; font-size: 24px; }
+    #start p { margin: 0; max-width: 300px; line-height: 1.45; opacity: .85; }
+    #start button {
+      font: 600 17px Inter, system-ui, sans-serif; color: #1F2A2E; background: #D9A441; border: 0; border-radius: 999px; padding: 14px 32px;
+    }
+    #msg { color: #e8a49b; min-height: 1.4em; }
+  </style>
+  <script type="importmap">
+  { "imports": {
+      "three": "./vendor/three/three.module.js",
+      "three/addons/": "./vendor/three/addons/"
+  } }
+  </script>
+</head>
+<body>
+  <div id="ar"></div>
+  <div id="start">
+    <h1>AR Card</h1>
+    <p>Allow camera access, then point your phone at the card.</p>
+    <button id="go">Start</button>
+    <p id="msg"></p>
+  </div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { MindARThree } from './vendor/mind-ar/mindar-image-three.prod.js';
+
+    // Target space: card width = 1 unit, origin at card center, +y toward the top edge, +z out of the card.
+    // QR center sits 22 mm below the top of the 50.8 x 88.9 mm card.
+    const CARD_W = 50.8, CARD_H = 88.9;
+    const QR_CENTER_Y = (CARD_H / 2 - 22) / CARD_W;
+    const CUBE = 18 / CARD_W;
+
+    const mindar = new MindARThree({
+      container: document.querySelector('#ar'),
+      imageTargetSrc: './card.mind',
+      filterMinCF: 0.0005,
+      filterBeta: 0.01,
+      uiLoading: 'yes', uiScanning: 'yes', uiError: 'yes',
+    });
+    const { renderer, scene, camera } = mindar;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x445544, 1.6));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.8);
+    sun.position.set(0.6, 0.8, 1.2);
+    scene.add(sun);
+
+    const anchor = mindar.addAnchor(0);
+    const model = new THREE.Group();
+    model.position.set(0, QR_CENTER_Y, 0);
+    anchor.group.add(model);
+
+    // Soft contact shadow so the cube reads as standing on the card
+    const shadowTex = (() => {
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      const g = c.getContext('2d');
+      const grad = g.createRadialGradient(64, 64, 10, 64, 64, 64);
+      grad.addColorStop(0, 'rgba(0,0,0,0.55)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+      return new THREE.CanvasTexture(c);
+    })();
+    const shadow = new THREE.Mesh(
+      new THREE.PlaneGeometry(CUBE * 1.9, CUBE * 1.9),
+      new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })
+    );
+    shadow.position.z = 0.001;
+    model.add(shadow);
+
+    // Cube with one card-palette color per face, resting on the QR code
+    const faces = ['#2F7F7A', '#2F7F7A', '#B5473A', '#B5473A', '#D9A441', '#5E7F3A']
+      .map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55 }));
+    const geo = new THREE.BoxGeometry(CUBE, CUBE, CUBE);
+    const cube = new THREE.Mesh(geo, faces);
+    cube.position.z = CUBE / 2;
+    cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: '#1F2A2E' })));
+    model.add(cube);
+
+    const startEl = document.querySelector('#start'), msg = document.querySelector('#msg');
+    document.querySelector('#go').addEventListener('click', async () => {
+      msg.textContent = '';
+      try {
+        await mindar.start();
+        startEl.remove();
+        renderer.setAnimationLoop(() => renderer.render(scene, camera));
+      } catch (e) {
+        msg.textContent = 'Could not open the camera. Check camera permission and try again.';
+        console.error(e);
+      }
+    });
+    if (new URLSearchParams(location.search).has('autostart')) document.querySelector('#go').click();
+  </script>
+</body>
+</html>
