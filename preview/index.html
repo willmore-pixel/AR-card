@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AR 物件預覽</title>
+  <style>
+    :root { --bg: #1B1714; --panel: #24201C; --line: #3A332C; --text: #F2EADF; --muted: #A99C8C; --accent: #D9A441; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.4 Inter, system-ui, "Noto Sans TC", sans-serif; }
+    body { display: flex; height: 100%; }
+    #view { position: relative; flex: 1; min-width: 0; touch-action: none; }
+    #view canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+    #view .hint { position: absolute; left: 12px; bottom: 10px; color: var(--muted); font-size: 12px; pointer-events: none; }
+    #view .tools { position: absolute; right: 10px; top: 10px; display: flex; gap: 6px; }
+    #panel { width: 340px; flex: none; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); padding: 14px 16px 40px; }
+    h1 { font-size: 16px; margin: 0 0 12px; }
+    h2 { font-size: 12px; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; font-weight: 600; }
+    label.row { display: grid; grid-template-columns: 92px 1fr 54px; align-items: center; gap: 8px; margin: 6px 0; }
+    label.row output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+    label.row.check { grid-template-columns: 92px 1fr; }
+    input[type=range] { width: 100%; accent-color: var(--accent); }
+    input[type=color] { width: 100%; height: 26px; border: 1px solid var(--line); background: none; padding: 0; border-radius: 4px; }
+    select, button, textarea { font: inherit; color: var(--text); background: #2E2823; border: 1px solid var(--line); border-radius: 6px; }
+    select { width: 100%; padding: 6px 8px; }
+    button { padding: 6px 10px; cursor: pointer; }
+    button:hover { border-color: var(--accent); }
+    button.primary { background: var(--accent); color: #1B1714; border-color: var(--accent); font-weight: 600; }
+    .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    textarea { width: 100%; height: 190px; padding: 8px; font: 12px/1.4 ui-monospace, Menlo, monospace; resize: vertical; }
+    .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+    #status { min-height: 1.4em; }
+    @media (max-width: 760px) {
+      body { flex-direction: column; }
+      #view { flex: none; height: 52vh; }
+      #panel { width: auto; flex: 1; border-left: 0; border-top: 1px solid var(--line); }
+    }
+  </style>
+  <script type="importmap">
+  { "imports": { "three": "../vendor/three/three.module.js" } }
+  </script>
+</head>
+<body>
+  <div id="view">
+    <div class="tools"><button id="resetView">重設視角</button><button id="pause">暫停</button></div>
+    <div class="hint">拖曳旋轉視角，滾輪或雙指縮放</div>
+  </div>
+  <div id="panel">
+    <h1>AR 物件預覽</h1>
+    <label class="row check"><span>卡片</span><select id="card"></select></label>
+    <div class="btns">
+      <button id="pickFront">換卡片圖…</button>
+      <button id="pickImage">換物件圖…</button>
+      <input type="file" id="frontFile" accept="image/*" hidden>
+      <input type="file" id="imageFile" accept="image/*,.svg" hidden>
+    </div>
+    <p class="note" id="status"></p>
+
+    <h2>濾鏡</h2>
+    <label class="row check"><span>效果</span><select id="filter"></select></label>
+    <div id="filterParams"></div>
+
+    <h2>大小與動作</h2>
+    <div id="motionParams"></div>
+
+    <h2>匯出設定</h2>
+    <p class="note">這段就是 card.json 裡的 "object"，交給 AR 頁面套用。也可以貼上修改後按「套用」。</p>
+    <textarea id="json" spellcheck="false"></textarea>
+    <div class="btns">
+      <button class="primary" id="copy">複製</button>
+      <button id="apply">套用</button>
+      <button id="download">下載 card.json</button>
+      <button id="link">複製預覽連結</button>
+      <button id="reset">還原這張卡的設定</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    // Units are millimetres. The card lies on the table with its top edge away from the viewer,
+    // like the photo; "card space" matches the AR page (+y toward the top edge, +z out of the card).
+    const CARD_W = 50.8, CARD_H = 88.9, CARD_T = 0.35;
+    const QR_CENTER_Y = CARD_H / 2 - 22;
+    const CUBE = 18;
+    const ROOT = '../';
+    const FALLBACK_CARDS = ['willmore', 'kenny-yen', 'co-willmore', 'co-sam'];
+    const ID = /^[a-z0-9-]{1,40}$/;
+
+    // ---------- Filters ----------
+    // Each filter is a menu entry: a label, its own sliders, build() returning the object to float
+    // above the QR code, and an optional tick() for per-frame effects. Add a new effect by adding
+    // an entry here; the panel, export and preview link pick it up automatically.
+    const loadImage = async src => { const img = new Image(); img.crossOrigin = 'anonymous'; img.src = src; await img.decode(); return img; };
+    const fitCanvas = (img, pad) => {
+      const aspect = (img.naturalWidth || 1) / (img.naturalHeight || 1);
+      const S = 1024;
+      const w = aspect >= 1 ? S : Math.round(S * aspect), h = aspect >= 1 ? Math.round(S / aspect) : S;
+      return { w, h, cw: Math.round(w * (1 + 2 * pad)), ch: Math.round(h * (1 + 2 * pad)) };
+    };
+    const tinted = (img, box, color) => {
+      const c = document.createElement('canvas'); c.width = box.cw; c.height = box.ch;
+      const g = c.getContext('2d');
+      g.drawImage(img, (box.cw - box.w) / 2, (box.ch - box.h) / 2, box.w, box.h);
+      if (color) { g.globalCompositeOperation = 'source-in'; g.fillStyle = color; g.fillRect(0, 0, box.cw, box.ch); }
+      return c;
+    };
+    const texture = canvas => { const t = new THREE.CanvasTexture(canvas); t.colorSpace = THREE.SRGBColorSpace; return t; };
+
+    // A flat drawing with optional thickness, stood up along the spin axis when "upright" (as the AR page does)
+    const signFromCanvases = (faceCanvas, sideCanvas, box, s) => {
+      const pad = (box.cw / box.w - 1) / 2;
+      const width = s.size_mm * (1 + 2 * pad), height = width * box.ch / box.cw;
+      const faceMat = new THREE.MeshBasicMaterial({ map: texture(faceCanvas), transparent: true, depthWrite: false, side: THREE.DoubleSide });
+      const plane = new THREE.PlaneGeometry(width, height);
+      const sign = new THREE.Group();
+      const depth = s.depth_mm || 0;
+      if (depth > 0) {
+        const sideMat = new THREE.MeshBasicMaterial({ map: texture(sideCanvas), alphaTest: 0.5, side: THREE.DoubleSide });
+        const n = Math.max(2, Math.round(depth * 8));
+        for (let i = 0; i < n; i++) {
+          const layer = new THREE.Mesh(plane, sideMat);
+          layer.position.z = -depth / 2 + depth * i / (n - 1);
+          sign.add(layer);
+        }
+      }
+      for (const z of depth > 0 ? [depth / 2, -depth / 2] : [0]) {
+        const face = new THREE.Mesh(plane, faceMat);
+        face.position.z = z;
+        sign.add(face);
+      }
+      const holder = new THREE.Group();
+      holder.add(sign);
+      holder.userData.glow = faceMat;
+      if (s.upright) {
+        sign.rotation.x = Math.PI / 2;
+        sign.position.z = height * box.h / box.ch / 2 - CUBE / 2;
+      }
+      return holder;
+    };
+
+    const FILTERS = {
+      neon: {
+        label: '霓虹燈',
+        params: [
+          { key: 'color', label: '燈光顏色', type: 'color', def: o => o.color || '#6FE3FF' },
+          { key: 'core', label: '燈管核心', type: 'color', def: o => o.core || '#F4FDFF' },
+          { key: 'glow', label: '光暈強度', type: 'range', min: 0, max: 2.5, step: 0.05, def: o => o.glow ?? 1 },
+          { key: 'flicker', label: '閃爍強度', type: 'range', min: 0, max: 5, step: 0.1, def: o => o.flicker ?? 1 },
+          { key: 'spill', label: '桌面反光', type: 'range', min: 0, max: 2, step: 0.05, def: o => o.spill ?? 1 },
+          { key: 'depth_mm', label: '厚度', type: 'range', min: 0, max: 6, step: 0.5, unit: 'mm', def: o => o.depth_mm ?? 0 },
+          { key: 'side', label: '側邊顏色', type: 'color', def: o => o.side || o.color || '#B07A1E' },
+          { key: 'upright', label: '直立', type: 'check', def: o => !!o.upright },
+        ],
+        async build(s, ctx) {
+          const img = await loadImage(ctx.imageSrc);
+          const box = fitCanvas(img, 0.22);
+          const colored = tinted(img, box, s.color), core = tinted(img, box, s.core);
+          const out = document.createElement('canvas'); out.width = box.cw; out.height = box.ch;
+          const g = out.getContext('2d');
+          // Same layered glow as the AR page; "glow" scales the blur radius and strength (1 = AR page today)
+          g.shadowColor = s.color;
+          if (s.glow > 0) {
+            for (const [blur, alpha] of [[90, 0.9], [45, 0.9], [18, 1], [6, 1]]) {
+              g.globalAlpha = Math.min(1, alpha * s.glow); g.shadowBlur = blur * Math.max(s.glow, 0.15); g.drawImage(colored, 0, 0);
+            }
+          }
+          g.shadowBlur = 0; g.globalAlpha = 1;
+          g.drawImage(core, 0, 0);
+          const item = signFromCanvases(out, tinted(img, box, s.side), box, s);
+          item.userData.spill = s.color;
+          item.userData.flickerUntil = 0;
+          return item;
+        },
+        tick(item, t, dt, s, ctx) {
+          // Steady glow with the odd quick neon flicker; "flicker" 1 = AR page today (about one every 4 s)
+          const chance = 1 - Math.pow(1 - 0.004 * s.flicker, dt * 60);
+          if (t > item.userData.flickerUntil && Math.random() < chance) item.userData.flickerUntil = t + 0.18;
+          const f = t < item.userData.flickerUntil ? 0.35 + 0.65 * Math.random() : 1;
+          item.userData.glow.opacity = f;
+          ctx.spill.material.opacity = (0.35 + 0.3 * ctx.lift) * f * s.spill;
+        },
+      },
+      image: {
+        label: '原圖（無光暈）',
+        params: [
+          { key: 'depth_mm', label: '厚度', type: 'range', min: 0, max: 6, step: 0.5, unit: 'mm', def: o => o.depth_mm ?? 0 },
+          { key: 'side', label: '側邊顏色', type: 'color', def: o => o.side || '#888888' },
+          { key: 'upright', label: '直立', type: 'check', def: o => o.upright ?? true },
+        ],
+        async build(s, ctx) {
+          const img = await loadImage(ctx.imageSrc);
+          const box = fitCanvas(img, 0);
+          const item = signFromCanvases(tinted(img, box), tinted(img, box, s.side), box, s);
+          item.userData.glow.alphaTest = 0.5; item.userData.glow.transparent = false; item.userData.glow.depthWrite = true;
+          return item;
+        },
+      },
+      cube: {
+        label: '彩色方塊',
+        params: [
+          { key: 'edge', label: '邊線顏色', type: 'color', def: (o, card) => card.edge || '#1F2A2E' },
+        ],
+        async build(s, ctx) {
+          const k = s.size_mm;
+          const geo = new THREE.BoxGeometry(k, k, k);
+          const faces = (ctx.card.cube || ['#2F7F7A', '#2F7F7A', '#B5473A', '#B5473A', '#D9A441', '#5E7F3A'])
+            .map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, emissive: c, emissiveIntensity: 0.3 }));
+          const m = new THREE.Mesh(geo, faces);
+          m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: s.edge })));
+          m.position.z = (k - CUBE) / 2;
+          const holder = new THREE.Group(); holder.add(m);
+          return holder;
+        },
+        export: s => ({ edge: s.edge }),
+      },
+    };
+
+    // Shared by every filter. Size rebuilds the object; the rest only change the animation.
+    const MOTION = [
+      { key: 'size_mm', label: '顯示大小', type: 'range', min: 8, max: 50, step: 1, unit: 'mm', rebuild: true, def: (o, c, f) => o.size_mm ?? (f === 'cube' ? 18 : 26) },
+      { key: 'hover_mm', label: '懸浮高度', type: 'range', min: 0, max: 40, step: 0.5, unit: 'mm', def: o => o.hover_mm ?? 10.8 },
+      { key: 'bob_mm', label: '上下浮動', type: 'range', min: 0, max: 8, step: 0.1, unit: 'mm', def: o => o.bob_mm ?? 2.2 },
+      { key: 'turn', label: '轉一圈', type: 'range', min: 0.5, max: 10, step: 0.1, unit: '秒', def: o => (o.spin && o.spin.turn) || 2.5 },
+      { key: 'rest', label: '停頓', type: 'range', min: 0, max: 15, step: 0.1, unit: '秒', def: o => o.spin ? Math.max(0, (o.spin.period || 6) - (o.spin.turn || 2.5)) : 3.5 },
+    ];
+
+    // ---------- Scene ----------
+    const view = document.querySelector('#view');
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.shadowMap.enabled = true;
+    view.prepend(renderer.domElement);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#2A1A10');
+    const camera = new THREE.PerspectiveCamera(35, 1, 1, 3000);
+
+    scene.add(new THREE.HemisphereLight(0xfff4e6, 0x3a2414, 1.3));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+    sun.position.set(-60, 160, 40);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    Object.assign(sun.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, near: 10, far: 400 });
+    scene.add(sun);
+
+    // Wooden table
+    const woodTex = (() => {
+      const c = document.createElement('canvas'); c.width = 512; c.height = 1024;
+      const g = c.getContext('2d');
+      g.fillStyle = '#6E3A1C'; g.fillRect(0, 0, 512, 1024);
+      for (let i = 0; i < 260; i++) {
+        const x = Math.random() * 512, w = 1 + Math.random() * 6;
+        g.fillStyle = Math.random() < 0.5 ? `rgba(40,16,4,${0.08 + Math.random() * 0.25})` : `rgba(150,84,44,${0.04 + Math.random() * 0.1})`;
+        g.beginPath();
+        g.moveTo(x, 0);
+        for (let y = 0; y <= 1024; y += 64) g.lineTo(x + Math.sin(y / 180 + i) * 6, y);
+        g.lineTo(x + w, 1024); g.lineTo(x + w, 0); g.fill();
+      }
+      const t = texture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 2);
+      return t;
+    })();
+    const table = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.45 }));
+    table.rotation.x = -Math.PI / 2;
+    table.rotation.z = 0.12;
+    table.receiveShadow = true;
+    scene.add(table);
+
+    // Card space: rotate so card +z is world up and the card's top edge points away from the camera
+    const cardSpace = new THREE.Group();
+    cardSpace.rotation.x = -Math.PI / 2;
+    cardSpace.rotation.z = 0.18;
+    cardSpace.position.y = CARD_T;
+    scene.add(cardSpace);
+    const white = new THREE.MeshStandardMaterial({ color: '#F4F4F0', roughness: 0.8 });
+    const frontMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.7 });
+    const cardMesh = new THREE.Mesh(new THREE.BoxGeometry(CARD_W, CARD_H, CARD_T), [white, white, white, white, frontMat, white]);
+    cardMesh.position.z = -CARD_T / 2;
+    cardMesh.receiveShadow = true;
+    cardSpace.add(cardMesh);
+
+    const model = new THREE.Group();
+    model.position.set(0, QR_CENTER_Y, 0);
+    cardSpace.add(model);
+    const radial = (inner, outer) => {
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      const g = c.getContext('2d');
+      const grad = g.createRadialGradient(64, 64, 10, 64, 64, 64);
+      grad.addColorStop(0, inner); grad.addColorStop(1, outer);
+      g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+      return new THREE.CanvasTexture(c);
+    };
+    const spill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }));
+    spill.position.z = 0.05;
+    model.add(spill);
+
+    // Simple orbit: drag to turn, wheel/pinch to zoom
+    const target = new THREE.Vector3();
+    const HOME = { radius: 205, polar: 0.62, azimuth: -0.12 };
+    const orbit = { ...HOME };
+    const placeCamera = () => {
+      cardSpace.localToWorld(target.set(0, QR_CENTER_Y * 0.35, 14));
+      orbit.polar = Math.min(1.45, Math.max(0.05, orbit.polar));
+      orbit.radius = Math.min(600, Math.max(50, orbit.radius));
+      camera.position.set(
+        target.x + orbit.radius * Math.sin(orbit.polar) * Math.sin(orbit.azimuth),
+        target.y + orbit.radius * Math.cos(orbit.polar),
+        target.z + orbit.radius * Math.sin(orbit.polar) * Math.cos(orbit.azimuth));
+      camera.lookAt(target);
+    };
+    const pointers = new Map();
+    let pinch = 0;
+    const el = renderer.domElement;
+    el.addEventListener('pointerdown', e => { el.setPointerCapture(e.pointerId); pointers.set(e.pointerId, [e.clientX, e.clientY]); });
+    el.addEventListener('pointerup', e => { pointers.delete(e.pointerId); pinch = 0; });
+    el.addEventListener('pointercancel', e => { pointers.delete(e.pointerId); pinch = 0; });
+    el.addEventListener('pointermove', e => {
+      const prev = pointers.get(e.pointerId);
+      if (!prev) return;
+      pointers.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+        if (pinch) orbit.radius *= pinch / d;
+        pinch = d;
+      } else {
+        orbit.azimuth -= (e.clientX - prev[0]) * 0.008;
+        orbit.polar -= (e.clientY - prev[1]) * 0.008;
+      }
+      placeCamera();
+    });
+    el.addEventListener('wheel', e => { e.preventDefault(); orbit.radius *= Math.exp(e.deltaY * 0.001); placeCamera(); }, { passive: false });
+    document.querySelector('#resetView').onclick = () => { Object.assign(orbit, HOME); placeCamera(); };
+
+    const resize = () => {
+      const { clientWidth: w, clientHeight: h } = view;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    };
+    new ResizeObserver(resize).observe(view);
+
+    // ---------- State ----------
+    const state = { cardId: null, card: null, filter: 'neon', settings: {}, imageSrc: null, item: null };
+    const statusEl = document.querySelector('#status');
+    const say = t => { statusEl.textContent = t; };
+
+    const firstThatLoads = async srcs => {
+      for (const src of srcs) { try { return { src, img: await loadImage(src) }; } catch {} }
+      return null;
+    };
+    const setFront = async srcs => {
+      const hit = await firstThatLoads(srcs);
+      if (!hit) { frontMat.map = null; frontMat.needsUpdate = true; return null; }
+      const t = new THREE.Texture(hit.img); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.needsUpdate = true;
+      frontMat.map = t; frontMat.needsUpdate = true;
+      return hit.src;
+    };
+
+    const objectFromCard = card => card.object || { type: 'cube' };
+    const defaultsFor = (filterKey, card) => {
+      const o = objectFromCard(card);
+      const s = {};
+      for (const p of [...FILTERS[filterKey].params, ...MOTION]) s[p.key] = p.def(o, card, filterKey);
+      return s;
+    };
+
+    // ---------- Panel ----------
+    const filterSel = document.querySelector('#filter');
+    for (const [key, f] of Object.entries(FILTERS)) filterSel.add(new Option(f.label, key));
+    const fmt = (p, v) => p.type === 'range' ? `${+(+v).toFixed(2)}${p.unit ? ' ' + p.unit : ''}` : '';
+    const renderParams = (box, params) => {
+      box.replaceChildren();
+      for (const p of params) {
+        const row = document.createElement('label');
+        row.className = 'row' + (p.type === 'range' ? '' : ' check');
+        const name = document.createElement('span'); name.textContent = p.label;
+        const input = document.createElement('input');
+        input.type = p.type === 'check' ? 'checkbox' : p.type;
+        if (p.type === 'range') Object.assign(input, { min: p.min, max: p.max, step: p.step });
+        const v = state.settings[p.key];
+        if (p.type === 'check') input.checked = !!v; else input.value = v;
+        if (p.type === 'check') input.style.justifySelf = 'start';
+        const out = document.createElement('output'); out.textContent = fmt(p, v);
+        input.addEventListener('input', () => {
+          state.settings[p.key] = p.type === 'check' ? input.checked : p.type === 'range' ? +input.value : input.value;
+          out.textContent = fmt(p, state.settings[p.key]);
+          changed(p.rebuild !== false && (p.rebuild || FILTERS[state.filter].params.includes(p)));
+        });
+        row.append(name, input);
+        if (p.type === 'range') row.append(out);
+        box.append(row);
+      }
+    };
+    const renderPanel = () => {
+      filterSel.value = state.filter;
+      renderParams(document.querySelector('#filterParams'), FILTERS[state.filter].params);
+      renderParams(document.querySelector('#motionParams'), MOTION);
+    };
+
+    // ---------- Export ----------
+    const r2 = v => Math.round(v * 100) / 100;
+    const exportObject = () => {
+      const s = state.settings, f = FILTERS[state.filter];
+      const base = objectFromCard(state.card);
+      let out = { type: state.filter };
+      if (state.filter !== 'cube') out.src = state.imageSrc?.startsWith(ROOT) ? state.imageSrc.slice(ROOT.length) : (base.src || '');
+      if (f.export) Object.assign(out, f.export(s));
+      else for (const p of f.params) out[p.key] = p.type === 'range' ? r2(s[p.key]) : s[p.key];
+      Object.assign(out, {
+        size_mm: r2(s.size_mm), hover_mm: r2(s.hover_mm), bob_mm: r2(s.bob_mm),
+        spin: { period: r2(s.turn + s.rest), turn: r2(s.turn) },
+      });
+      return out;
+    };
+    const importObject = o => {
+      const filter = FILTERS[o.type] ? o.type : 'neon';
+      state.filter = filter;
+      state.settings = defaultsFor(filter, { ...state.card, object: o });
+    };
+    const jsonBox = document.querySelector('#json');
+    const writeExport = () => {
+      jsonBox.value = JSON.stringify(exportObject(), null, 2);
+      const hash = `card=${state.cardId}&o=${encodeURIComponent(JSON.stringify(exportObject()))}`;
+      history.replaceState(null, '', '#' + hash);
+    };
+
+    // ---------- Building ----------
+    let buildToken = 0, rebuildTimer = 0;
+    const rebuild = async () => {
+      const token = ++buildToken;
+      const f = FILTERS[state.filter];
+      let item;
+      try {
+        item = await f.build(state.settings, { card: state.card, imageSrc: state.imageSrc });
+      } catch (e) {
+        console.error(e);
+        say('物件圖片載入失敗，先顯示方塊。可以按「換物件圖…」選一張。');
+        item = await FILTERS.cube.build({ ...state.settings, size_mm: 18, edge: '#1F2A2E' }, { card: state.card });
+      }
+      if (token !== buildToken) return;
+      if (state.item) model.remove(state.item);
+      state.item = item;
+      model.add(item);
+      const isNeon = state.filter === 'neon';
+      const k = CUBE * (isNeon ? 2.6 : 1.9) * (state.settings.size_mm / (isNeon ? 26 : 18)) ** 0.5;
+      spill.scale.set(k, k, 1);
+      spill.material.map?.dispose();
+      spill.material.map = isNeon ? radial(state.settings.color + 'AA', state.settings.color + '00') : radial('rgba(0,0,0,0.55)', 'rgba(0,0,0,0)');
+      spill.material.needsUpdate = true;
+    };
+    const changed = needsRebuild => {
+      writeExport();
+      if (needsRebuild) { clearTimeout(rebuildTimer); rebuildTimer = setTimeout(rebuild, 120); }
+    };
+
+    const openCard = async (id, override) => {
+      say('載入中…');
+      const card = await fetch(`${ROOT}cards/${id}/card.json`).then(r => r.ok ? r.json() : null).catch(() => null);
+      if (!card) { say(`找不到卡片 ${id}`); return; }
+      state.cardId = id; state.card = card;
+      document.querySelector('#card').value = id;
+      const o = override || objectFromCard(card);
+      importObject(o);
+      state.imageSrc = o.src ? ROOT + o.src : `${ROOT}assets/pacewing/suit-neon.svg`;
+      const front = await setFront([`fronts/${id}.jpg`, `${ROOT}cards/${id}/target.png`, card.track ? `${ROOT}tracks/${card.track}.png` : null].filter(Boolean));
+      renderPanel();
+      writeExport();
+      await rebuild();
+      placeCamera();
+      say(front && !front.startsWith('fronts/') ? '這張卡還沒有正面預覽圖，先用追蹤圖代替。' : '');
+    };
+
+    // ---------- Wiring ----------
+    filterSel.onchange = () => {
+      const keep = Object.fromEntries(MOTION.map(p => [p.key, state.settings[p.key]]));
+      state.filter = filterSel.value;
+      state.settings = { ...defaultsFor(state.filter, state.card), ...keep };
+      renderPanel(); changed(true);
+    };
+    document.querySelector('#card').onchange = e => openCard(e.target.value);
+    document.querySelector('#reset').onclick = () => openCard(state.cardId);
+    document.querySelector('#copy').onclick = async () => {
+      try { await navigator.clipboard.writeText(jsonBox.value); say('已複製設定。'); }
+      catch { jsonBox.select(); say('請手動複製上面的文字。'); }
+    };
+    document.querySelector('#link').onclick = async () => {
+      try { await navigator.clipboard.writeText(location.href); say('已複製預覽連結，打開就是現在的設定。'); }
+      catch { say(location.href); }
+    };
+    document.querySelector('#apply').onclick = async () => {
+      try {
+        const o = JSON.parse(jsonBox.value);
+        importObject(o);
+        if (o.src) state.imageSrc = ROOT + o.src;
+        renderPanel(); writeExport(); await rebuild(); say('已套用。');
+      } catch { say('格式不對，請檢查 JSON。'); }
+    };
+    document.querySelector('#download').onclick = () => {
+      const card = { ...state.card, object: exportObject() };
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(card, null, 2) + '\n'], { type: 'application/json' }));
+      a.download = 'card.json'; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    };
+    const pickFile = (input, onFile) => { input.onchange = () => { const f = input.files[0]; if (f) onFile(URL.createObjectURL(f), f.name); input.value = ''; }; input.click(); };
+    document.querySelector('#pickFront').onclick = () => pickFile(document.querySelector('#frontFile'), async url => { await setFront([url]); say('已換上卡片圖（只在這次預覽）。'); });
+    document.querySelector('#pickImage').onclick = () => pickFile(document.querySelector('#imageFile'), async (url, name) => {
+      state.imageSrc = url;
+      if (state.filter === 'cube') { state.filter = 'neon'; state.settings = { ...defaultsFor('neon', state.card), ...state.settings }; renderPanel(); }
+      await rebuild(); writeExport();
+      say(`已換上物件圖 ${name}。要用在 AR 上，請把檔案放進 repo 的 assets/ 並更新 "src"。`);
+    });
+    let paused = false;
+    document.querySelector('#pause').onclick = e => { paused = !paused; e.target.textContent = paused ? '播放' : '暫停'; };
+
+    // ---------- Animation (same rhythm as the AR page) ----------
+    const ease = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+    let t = 0, last = performance.now();
+    const BOB_PERIOD = 3;
+    renderer.setAnimationLoop(now => {
+      const dt = Math.min(0.1, (now - last) / 1000); last = now;
+      if (!paused) t += dt;
+      const s = state.settings, item = state.item;
+      if (item) {
+        const lift = s.hover_mm + s.bob_mm * Math.sin(t * 2 * Math.PI / BOB_PERIOD);
+        item.position.z = CUBE / 2 + lift;
+        const period = Math.max(0.01, s.turn + s.rest);
+        const phase = Math.min((t % period) / s.turn, 1);
+        item.rotation.z = (Math.floor(t / period) + ease(phase)) * 2 * Math.PI;
+        const k = 1 - 0.35 * lift / Math.max(0.01, s.hover_mm + s.bob_mm);
+        const tick = FILTERS[state.filter].tick;
+        if (tick && item.userData.glow) tick(item, t, paused ? 0 : dt, s, { spill, lift: k });
+        else spill.material.opacity = 0.35 + 0.5 * k;
+      }
+      renderer.render(scene, camera);
+    });
+
+    // ---------- Start ----------
+    const listCards = async () => {
+      try {
+        const r = await fetch('https://api.github.com/repos/willmore-pixel/AR-card/contents/cards');
+        if (!r.ok) throw 0;
+        const ids = (await r.json()).filter(e => e.type === 'dir' && ID.test(e.name)).map(e => e.name);
+        return ids.length ? ids : FALLBACK_CARDS;
+      } catch { return FALLBACK_CARDS; }
+    };
+    const params = new URLSearchParams(location.hash.slice(1));
+    const ids = await listCards();
+    const cardSel = document.querySelector('#card');
+    for (const id of ids) cardSel.add(new Option(id, id));
+    let startId = params.get('card');
+    if (!startId || !ID.test(startId)) startId = ids.includes('kenny-yen') ? 'kenny-yen' : ids[0];
+    if (!ids.includes(startId)) cardSel.add(new Option(startId, startId));
+    let override = null;
+    try { override = params.get('o') ? JSON.parse(params.get('o')) : null; } catch {}
+    resize();
+    await openCard(startId, override);
+  </script>
+</body>
+</html>
