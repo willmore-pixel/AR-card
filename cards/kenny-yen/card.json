@@ -1,25 +1,79 @@
 {
   "name": "Kenny Yen",
   "title": "Founder",
-  "lines": ["pacewingbespoke@gmail.com", "0972 831 233", "Pacewing Bespoke"],
+  "lines": [
+    "pacewingbespoke@gmail.com",
+    "0972 831 233",
+    "Pacewing Bespoke"
+  ],
   "seed": 1957,
   "track": "pacewing",
   "url": "https://willmore-pixel.github.io/AR-card/?card=kenny-yen",
-  "cube": ["#004262", "#004262", "#004262", "#004262", "#FFFFFF", "#FFFFFF"],
+  "cube": [
+    "#004262",
+    "#004262",
+    "#004262",
+    "#004262",
+    "#FFFFFF",
+    "#FFFFFF"
+  ],
   "edge": "#FFFFFF",
+  "object": {
+    "type": "neon",
+    "src": "assets/pacewing/mark-white.png",
+    "color": "#6FE3FF",
+    "size_mm": 26,
+    "spin": {
+      "period": 6.5,
+      "turn": 3
+    }
+  },
   "theme": {
     "bg": "#004262",
     "ink": "#004262",
-    "palette": ["#FFFFFF", "#FFFFFF", "#FFFFFF", "#B9D3E2", "#6FA3C2"],
-    "kinds": ["button", "stitch", "cross", "needle", "ring", "circle"],
+    "palette": [
+      "#FFFFFF",
+      "#FFFFFF",
+      "#FFFFFF",
+      "#B9D3E2",
+      "#6FA3C2"
+    ],
+    "kinds": [
+      "button",
+      "stitch",
+      "cross",
+      "needle",
+      "ring",
+      "circle"
+    ],
     "count": 230,
     "plate_stroke": "#FFFFFF",
     "panel_stroke": "#FFFFFF",
-    "panel": [4.0, 65.5, 42.8, 20.0],
-    "logo": {"src": "assets/pacewing/logo-white.png", "box": [15.4, 43.5, 20.0, 19.5]},
+    "panel": [
+      4.0,
+      65.5,
+      42.8,
+      20.0
+    ],
+    "logo": {
+      "src": "assets/pacewing/logo-white.png",
+      "box": [
+        15.4,
+        43.5,
+        20.0,
+        19.5
+      ]
+    },
     "name_font": "Caladea, 'Liberation Serif', Georgia, serif",
-    "name_size": 4.4, "name_weight": 700,
-    "title_color": "#3E7FA3", "rule_color": "#004262",
-    "name_y": 5.2, "title_y": 8.6, "rule_y": 10.3, "lines_y": 13.2, "line_step": 2.6, "line_size": 2.0
+    "name_size": 4.4,
+    "name_weight": 700,
+    "title_color": "#3E7FA3",
+    "rule_color": "#004262",
+    "name_y": 5.2,
+    "title_y": 8.6,
+    "rule_y": 10.3,
+    "lines_y": 13.2,
+    "line_step": 2.6,
+    "line_size": 2.0
   }
 }

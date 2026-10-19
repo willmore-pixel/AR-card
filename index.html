@@ -78,46 +78,107 @@
     model.position.set(0, QR_CENTER_Y, 0);
     anchor.group.add(model);
 
-    // Soft contact shadow so the cube reads as standing on the card
-    const shadowTex = (() => {
+    // What floats above the QR code comes from card.json "object": the default colored cube, or
+    // {"type": "neon", "src": <svg/png>, ...} for a glowing neon-sign version of an image.
+    const obj = card.object || { type: 'cube' };
+    const glowTex = (inner, outer) => {
       const c = document.createElement('canvas'); c.width = c.height = 128;
       const g = c.getContext('2d');
       const grad = g.createRadialGradient(64, 64, 10, 64, 64, 64);
-      grad.addColorStop(0, 'rgba(0,0,0,0.55)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+      grad.addColorStop(0, inner); grad.addColorStop(1, outer);
       g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
       return new THREE.CanvasTexture(c);
-    })();
+    };
+
+    // Soft contact shadow under a cube; for a neon sign, its colored light spilling onto the card
+    const neon = obj.type === 'neon';
+    const neonColor = obj.color || '#6FE3FF';
     const shadow = new THREE.Mesh(
-      new THREE.PlaneGeometry(CUBE * 1.9, CUBE * 1.9),
-      new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })
+      new THREE.PlaneGeometry(CUBE * (neon ? 2.6 : 1.9), CUBE * (neon ? 2.6 : 1.9)),
+      new THREE.MeshBasicMaterial({
+        map: neon ? glowTex(neonColor + 'AA', neonColor + '00') : glowTex('rgba(0,0,0,0.55)', 'rgba(0,0,0,0)'),
+        transparent: true, depthWrite: false,
+      })
     );
     shadow.position.z = 0.001;
     model.add(shadow);
 
-    // Cube with one card-palette color per face, resting on the QR code
+    // Cube with one card-palette color per face
     const faces = (card.cube || ['#2F7F7A', '#2F7F7A', '#B5473A', '#B5473A', '#D9A441', '#5E7F3A'])
       .map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, emissive: c, emissiveIntensity: 0.3 }));
-    const geo = new THREE.BoxGeometry(CUBE, CUBE, CUBE);
-    const cube = new THREE.Mesh(geo, faces);
-    cube.position.z = CUBE / 2;
     const edgeMat = new THREE.LineBasicMaterial({ color: card.edge || '#1F2A2E' });
-    cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat));
-    model.add(cube);
 
-    // Float above the QR code with a gentle bob. Every 6 s the cube makes one slow, eased turn
-    // around the card's normal, then rests until the next cycle.
-    const SPIN_PERIOD = 6, SPIN_TIME = 2.5, HOVER = CUBE * 0.6, BOB = CUBE * 0.12, BOB_PERIOD = 3;
+    // Neon sign: the image's shape drawn as a bright tube core inside layered colored glow
+    const makeNeon = async () => {
+      const img = new Image();
+      img.src = obj.src;
+      await img.decode();
+      const aspect = (img.naturalWidth || 1) / (img.naturalHeight || 1);
+      const S = 1024, pad = 0.22;
+      const w = aspect >= 1 ? S : Math.round(S * aspect), h = aspect >= 1 ? Math.round(S / aspect) : S;
+      const cw = Math.round(w * (1 + 2 * pad)), ch = Math.round(h * (1 + 2 * pad));
+      const tint = color => {
+        const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+        const g = c.getContext('2d');
+        g.drawImage(img, (cw - w) / 2, (ch - h) / 2, w, h);
+        g.globalCompositeOperation = 'source-in';
+        g.fillStyle = color; g.fillRect(0, 0, cw, ch);
+        return c;
+      };
+      const colored = tint(neonColor), core = tint(obj.core || '#F4FDFF');
+      const out = document.createElement('canvas'); out.width = cw; out.height = ch;
+      const g = out.getContext('2d');
+      g.shadowColor = neonColor;
+      for (const [blur, alpha] of [[90, 0.9], [45, 0.9], [18, 1], [6, 1]]) {
+        g.globalAlpha = alpha; g.shadowBlur = blur; g.drawImage(colored, 0, 0);
+      }
+      g.shadowBlur = 0; g.globalAlpha = 1;
+      g.drawImage(core, 0, 0);
+      const tex = new THREE.CanvasTexture(out);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const width = (obj.size_mm || 26) / CARD_W * (1 + 2 * pad);
+      // Normal (not additive) blending so the glow still shows over the white QR plate
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+      return new THREE.Mesh(new THREE.PlaneGeometry(width, width * ch / cw), mat);
+    };
+
+    let item;
+    if (neon) {
+      item = await makeNeon();
+    } else {
+      const geo = new THREE.BoxGeometry(CUBE, CUBE, CUBE);
+      item = new THREE.Mesh(geo, faces);
+      item.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat));
+    }
+    item.position.z = CUBE / 2;
+    model.add(item);
+
+    // Float above the QR code with a gentle bob. Each cycle the object makes one slow, eased turn,
+    // then rests: a cube turns around the card's normal, a neon sign spins around its upright axis.
+    // card.json "spin": {"period": s, "turn": s} sets the rhythm (default 6 s cycle, 2.5 s turn).
+    const SPIN_PERIOD = (obj.spin && obj.spin.period) || 6, SPIN_TIME = (obj.spin && obj.spin.turn) || 2.5;
+    const HOVER = CUBE * 0.6, BOB = CUBE * 0.12, BOB_PERIOD = 3;
     const ease = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
     const clock = new THREE.Clock();
+    let flickerUntil = 0;
     const animate = () => {
       const t = clock.getElapsedTime();
       const lift = HOVER + BOB * Math.sin(t * 2 * Math.PI / BOB_PERIOD);
-      cube.position.z = CUBE / 2 + lift;
+      item.position.z = CUBE / 2 + lift;
       const phase = Math.min((t % SPIN_PERIOD) / SPIN_TIME, 1);
-      cube.rotation.z = (Math.floor(t / SPIN_PERIOD) + ease(phase)) * 2 * Math.PI;
+      const angle = (Math.floor(t / SPIN_PERIOD) + ease(phase)) * 2 * Math.PI;
+      if (neon) item.rotation.y = angle; else item.rotation.z = angle;
       const s = 1 - 0.35 * lift / (HOVER + BOB);
       shadow.scale.set(s, s, 1);
-      shadow.material.opacity = 0.35 + 0.5 * s;
+      if (neon) {
+        // Steady glow with the odd quick neon flicker
+        if (t > flickerUntil && Math.random() < 0.004) flickerUntil = t + 0.18;
+        const f = t < flickerUntil ? 0.35 + 0.65 * Math.random() : 1;
+        item.material.opacity = f;
+        shadow.material.opacity = (0.35 + 0.3 * s) * f;
+      } else {
+        shadow.material.opacity = 0.35 + 0.5 * s;
+      }
     };
 
     // Keep reading the QR code in view, so the cube matches the card the camera sees, not just the
@@ -152,7 +213,7 @@
       if (!next) return;
       cardId = id;
       history.replaceState(null, '', `?card=${id}`);
-      if (next.track && next.track === card.track) {
+      if (next.track && next.track === card.track && !neon && !(next.object && next.object.type === 'neon')) {
         (next.cube || []).forEach((c, i) => { if (faces[i]) { faces[i].color.set(c); faces[i].emissive.set(c); } });
         edgeMat.color.set(next.edge || '#1F2A2E');
       } else {

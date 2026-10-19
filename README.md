@@ -12,7 +12,7 @@ One shared page serves every card. Each card's QR code links to `https://willmor
 
 ## Company looks
 
-An optional `"theme"` in `card.json` restyles the card: background, confetti colors and shapes (including tailoring motifs `button`, `stitch`, `cross`, `needle`), panel position, fonts, and a logo image kept clear of confetti. `"edge"` sets the cube's edge color. See `cards/kenny-yen/card.json` (Pacewing Bespoke).
+An optional `"theme"` in `card.json` restyles the card: background, confetti colors and shapes (including tailoring motifs `button`, `stitch`, `cross`, `needle`), panel position, fonts, and a logo image kept clear of confetti. `"edge"` sets the cube's edge color. `"object": {"type": "neon", "src": "<svg or png>", "color": "#6FE3FF", "size_mm": 26, "spin": {"period": 6.5, "turn": 3}}` replaces the cube with a glowing neon-sign version of an image; `spin` (seconds per cycle and per turn) also works for cubes. See `cards/kenny-yen/card.json` (Pacewing Bespoke).
 
 ## Cards that share one design (a company pattern)
 
