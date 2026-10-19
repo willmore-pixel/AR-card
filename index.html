@@ -154,7 +154,7 @@
     model.add(item);
 
     // Float above the QR code with a gentle bob. Each cycle the object makes one slow, eased turn,
-    // then rests: a cube turns around the card's normal, a neon sign spins around its upright axis.
+    // then rests, turning around the card's normal (the axis pointing straight out of the card).
     // card.json "spin": {"period": s, "turn": s} sets the rhythm (default 6 s cycle, 2.5 s turn).
     const SPIN_PERIOD = (obj.spin && obj.spin.period) || 6, SPIN_TIME = (obj.spin && obj.spin.turn) || 2.5;
     const HOVER = CUBE * 0.6, BOB = CUBE * 0.12, BOB_PERIOD = 3;
@@ -167,7 +167,7 @@
       item.position.z = CUBE / 2 + lift;
       const phase = Math.min((t % SPIN_PERIOD) / SPIN_TIME, 1);
       const angle = (Math.floor(t / SPIN_PERIOD) + ease(phase)) * 2 * Math.PI;
-      if (neon) item.rotation.y = angle; else item.rotation.z = angle;
+      item.rotation.z = angle;
       const s = 1 - 0.35 * lift / (HOVER + BOB);
       shadow.scale.set(s, s, 1);
       if (neon) {
