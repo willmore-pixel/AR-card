@@ -1,26 +1,67 @@
 {
   "name": "Liesel's Daddy",
   "title": "Luca",
-  "lines": [
-    "you@example.com",
-    "0900 000 000",
-    "Liesel & Daddy"
-  ],
+  "lines": [],
   "seed": 20261027,
   "url": "https://willmore-pixel.github.io/AR-card/?card=liesel-daddy",
-  "cube": ["#FF7A6B", "#FF7A6B", "#5BB8E8", "#5BB8E8", "#FFC23C", "#6CCB9A"],
+  "cube": [
+    "#FF7A6B",
+    "#FF7A6B",
+    "#5BB8E8",
+    "#5BB8E8",
+    "#FFC23C",
+    "#6CCB9A"
+  ],
   "edge": "#2B2A4C",
   "object": {
-    "spin": {"period": 6.5, "turn": 3}
+    "type": "neon",
+    "src": "assets/liesel/baby-girl.png",
+    "color": "#FF8FB8",
+    "core": "#FFF2F7",
+    "side": "#D95E8F",
+    "upright": true,
+    "depth_mm": 2,
+    "size_mm": 30,
+    "spin": {
+      "period": 6.5,
+      "turn": 3
+    }
   },
   "theme": {
     "bg": "#FFF7EC",
     "ink": "#2B2A4C",
-    "palette": ["#FF7A6B", "#FFC23C", "#5BB8E8", "#6CCB9A", "#A88BE0", "#2B2A4C"],
-    "kinds": ["circle", "half", "tri", "plus", "ring", "bar"],
+    "palette": [
+      "#FF8FB8",
+      "#FFC23C",
+      "#5BB8E8",
+      "#6CCB9A",
+      "#A88BE0",
+      "#FF7A6B"
+    ],
+    "kinds": [
+      "heart",
+      "star",
+      "bottle",
+      "rattle",
+      "pacifier",
+      "circle",
+      "half",
+      "plus"
+    ],
     "name_font": "'Inter Display', Inter, sans-serif",
     "name_weight": 900,
     "title_color": "#FF7A6B",
-    "rule_color": "#5BB8E8"
+    "rule_color": "#5BB8E8",
+    "scale": 1.6,
+    "count": 150,
+    "panel": [
+      3.5,
+      65.4,
+      43.8,
+      20.0
+    ],
+    "name_y": 9.0,
+    "title_y": 14.0,
+    "rule_y": 16.8
   }
 }

@@ -27,7 +27,7 @@ THEME = {
     "font": "Inter, 'Helvetica Neue', Arial, sans-serif", "name_font": None,
     "name_size": 5, "name_weight": 700, "title_color": "#2F7F7A", "rule_color": "#B5473A",
     "name_y": 8.2, "title_y": 12.6, "rule_y": 15.4, "lines_y": 19.6, "line_step": 3.4, "line_size": 2.3,
-    "logo": None,
+    "logo": None, "scale": 1,
 }
 THEME.update(CFG.get("theme", {}))
 BG, INK, PALETTE, KINDS = THEME["bg"], THEME["ink"], THEME["palette"], THEME["kinds"]
@@ -88,6 +88,32 @@ def shape(kind, x, y, s, rot, color):
         l, w = s * 0.75, s * 0.07
         return (f'<g {t}><path d="M{-l:.2f},0 L{l*0.7:.2f},{-w:.2f} Q{l:.2f},0 {l*0.7:.2f},{w:.2f} Z" fill="{color}"/>'
                 f'<ellipse cx="{l*0.62:.2f}" cy="0" rx="{s*0.08:.2f}" ry="{w*0.45:.2f}" fill="{BG}"/></g>')
+    # Baby motifs
+    if kind == "heart":
+        r = s / 2
+        return (f'<path {t} d="M0,{r*0.75:.2f} C{-r*1.1:.2f},{-r*0.05:.2f} {-r*0.6:.2f},{-r*0.95:.2f} 0,{-r*0.4:.2f} '
+                f'C{r*0.6:.2f},{-r*0.95:.2f} {r*1.1:.2f},{-r*0.05:.2f} 0,{r*0.75:.2f} Z" fill="{color}"/>')
+    if kind == "star":
+        pts = " ".join(f"{(s/2 if i % 2 == 0 else s/4.6)*math.sin(i*math.pi/5):.2f},{-(s/2 if i % 2 == 0 else s/4.6)*math.cos(i*math.pi/5):.2f}"
+                       for i in range(10))
+        return f'<polygon {t} points="{pts}" fill="{color}" stroke="{color}" stroke-width="{s*0.06:.2f}" stroke-linejoin="round"/>'
+    if kind == "bottle":
+        w, h = s * 0.42, s * 0.62
+        return (f'<g {t}><rect x="{-w/2:.2f}" y="{-h*0.35:.2f}" width="{w:.2f}" height="{h:.2f}" rx="{w*0.3:.2f}" fill="{color}"/>'
+                f'<rect x="{-w*0.6:.2f}" y="{-h*0.5:.2f}" width="{w*1.2:.2f}" height="{h*0.18:.2f}" rx="{h*0.05:.2f}" fill="{color}"/>'
+                f'<path d="M{-w*0.3:.2f},{-h*0.5:.2f} Q0,{-h*1.05:.2f} {w*0.3:.2f},{-h*0.5:.2f} Z" fill="{color}"/>'
+                f'<rect x="{-w*0.28:.2f}" y="{-h*0.1:.2f}" width="{w*0.56:.2f}" height="{h*0.07:.2f}" fill="{BG}"/>'
+                f'<rect x="{-w*0.28:.2f}" y="{h*0.12:.2f}" width="{w*0.56:.2f}" height="{h*0.07:.2f}" fill="{BG}"/></g>')
+    if kind == "rattle":
+        r = s * 0.26
+        return (f'<g {t}><circle cx="0" cy="{-s*0.22:.2f}" r="{r:.2f}" fill="{color}"/>'
+                f'<circle cx="0" cy="{-s*0.22:.2f}" r="{r*0.38:.2f}" fill="{BG}"/>'
+                f'<rect x="{-s*0.06:.2f}" y="{-s*0.02:.2f}" width="{s*0.12:.2f}" height="{s*0.4:.2f}" fill="{color}"/>'
+                f'<circle cx="0" cy="{s*0.42:.2f}" r="{s*0.1:.2f}" fill="{color}"/></g>')
+    if kind == "pacifier":
+        return (f'<g {t}><circle cx="0" cy="{-s*0.28:.2f}" r="{s*0.16:.2f}" fill="none" stroke="{color}" stroke-width="{s*0.08:.2f}"/>'
+                f'<ellipse cx="0" cy="{s*0.02:.2f}" rx="{s*0.42:.2f}" ry="{s*0.14:.2f}" fill="{color}"/>'
+                f'<ellipse cx="0" cy="{s*0.25:.2f}" rx="{s*0.13:.2f}" ry="{s*0.18:.2f}" fill="{color}"/></g>')
     if kind == "plus":
         a, b = s * 0.5, s * 0.14
         return (f'<path {t} d="M{-a:.2f},{-b:.2f}H{a:.2f}V{b:.2f}H{-a:.2f}Z M{-b:.2f},{-a:.2f}H{b:.2f}V{a:.2f}H{-b:.2f}Z" '
@@ -106,7 +132,7 @@ while len(shapes) < THEME["count"] and tries < 60000:
     x, y = rng.uniform(0, W), rng.uniform(0, H)
     if inside(plate, x, y, 1.6) or inside(PANEL, x, y, 1.2) or (LOGO and inside(LOGO, x, y, 1.0)):
         continue
-    s = rng.choice([rng.uniform(1.0, 2.2), rng.uniform(2.0, 3.6), rng.uniform(3.4, 5.2)])
+    s = rng.choice([rng.uniform(1.0, 2.2), rng.uniform(2.0, 3.6), rng.uniform(3.4, 5.2)]) * THEME["scale"]
     if any(math.hypot(x - px, y - py) < (s + ps) / 2 + 0.7 for px, py, ps in placed):
         continue
     placed.append((x, y, s))
