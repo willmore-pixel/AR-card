@@ -84,7 +84,7 @@
     const QR_CENTER_Y = CARD_H / 2 - 22;
     const CUBE = 18;
     const ROOT = '../';
-    const FALLBACK_CARDS = ['willmore', 'kenny-yen', 'liesel-daddy', 'susan', 'co-willmore', 'co-sam'];
+    const FALLBACK_CARDS = ['willmore', 'kenny-yen', 'liesel-daddy', 'susan', 'huirong-aliang', 'co-willmore', 'co-sam'];
     const ID = /^[a-z0-9-]{1,40}$/;
 
     // ---------- Filters ----------
@@ -206,7 +206,20 @@
           const geo = new THREE.BoxGeometry(k, k, k);
           const faces = (ctx.card.cube || ['#2F7F7A', '#2F7F7A', '#B5473A', '#B5473A', '#D9A441', '#5E7F3A'])
             .map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, emissive: c, emissiveIntensity: 0.3 }));
-          const m = new THREE.Mesh(geo, faces);
+          // "faces": {"top", "bottom", "sides": [x4]} images, mapped and stood up the same way as the AR page
+          let mats = faces;
+          const f = ctx.card.object && ctx.card.object.faces;
+          if (f) {
+            const sides = f.sides || [];
+            const load = src => new THREE.TextureLoader().loadAsync(ROOT + src).then(t => {
+              t.colorSpace = THREE.SRGBColorSpace;
+              return new THREE.MeshStandardMaterial({ map: t, roughness: 0.55, emissive: '#ffffff', emissiveMap: t, emissiveIntensity: 0.3 });
+            });
+            mats = await Promise.all([sides[0], sides[1], f.top, f.bottom, sides[2], sides[3]].map((src, i) => src ? load(src) : faces[i]))
+              .catch(e => { console.error('cube textures failed, using colors', e); return faces; });
+            geo.rotateX(Math.PI / 2);
+          }
+          const m = new THREE.Mesh(geo, mats);
           m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: s.edge })));
           m.position.z = (k - CUBE) / 2;
           const holder = new THREE.Group(); holder.add(m);
@@ -406,6 +419,7 @@
       let out = { type: state.filter };
       if (state.filter !== 'cube') out.src = state.imageSrc?.startsWith(ROOT) ? state.imageSrc.slice(ROOT.length) : (base.src || '');
       if (f.export) Object.assign(out, f.export(s));
+      if (state.filter === 'cube' && base.faces) out.faces = base.faces;
       else for (const p of f.params) out[p.key] = p.type === 'range' ? r2(s[p.key]) : s[p.key];
       Object.assign(out, {
         size_mm: r2(s.size_mm), hover_mm: r2(s.hover_mm), bob_mm: r2(s.bob_mm),
