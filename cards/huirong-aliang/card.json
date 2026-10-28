@@ -15,7 +15,7 @@
   "edge": "#0B2E66",
   "object": {
     "type": "cube",
-    "size_mm": 26,
+    "size_mm": 15,
     "faces": {
       "top": "assets/huirong/cube-top.png",
       "bottom": "assets/huirong/cube-bottom.png",
