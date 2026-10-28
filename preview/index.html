@@ -199,6 +199,7 @@
       cube: {
         label: '彩色方塊',
         params: [
+          { key: 'edges', label: '顯示邊線', type: 'check', def: o => o.edges !== false },
           { key: 'edge', label: '邊線顏色', type: 'color', def: (o, card) => card.edge || '#1F2A2E' },
         ],
         async build(s, ctx) {
@@ -215,17 +216,17 @@
               t.colorSpace = THREE.SRGBColorSpace;
               return new THREE.MeshStandardMaterial({ map: t, roughness: 0.55, emissive: '#ffffff', emissiveMap: t, emissiveIntensity: 0.3 });
             });
-            mats = await Promise.all([sides[0], sides[1], f.top, f.bottom, sides[2], sides[3]].map((src, i) => src ? load(src) : faces[i]))
+            mats = await Promise.all([sides[0], sides[2], f.top, f.bottom, sides[3], sides[1]].map((src, i) => src ? load(src) : faces[i]))
               .catch(e => { console.error('cube textures failed, using colors', e); return faces; });
             geo.rotateX(Math.PI / 2);
           }
           const m = new THREE.Mesh(geo, mats);
-          m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: s.edge })));
+          if (s.edges !== false) m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: s.edge })));
           m.position.z = (k - CUBE) / 2;
           const holder = new THREE.Group(); holder.add(m);
           return holder;
         },
-        export: s => ({ edge: s.edge }),
+        export: s => s.edges === false ? { edges: false } : { edge: s.edge },
       },
     };
 
