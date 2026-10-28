@@ -17,6 +17,11 @@
       font: 600 17px Inter, system-ui, sans-serif; color: #1F2A2E; background: #D9A441; border: 0; border-radius: 999px; padding: 14px 32px;
     }
     #msg { color: #e8a49b; min-height: 1.4em; }
+    #stop {
+      position: fixed; top: 14px; right: 14px; z-index: 20; font: 600 14px Inter, system-ui, sans-serif;
+      color: #F4EEDF; background: rgba(31, 42, 46, .72); border: 1px solid rgba(244, 238, 223, .5); border-radius: 999px; padding: 9px 16px;
+    }
+    #stop[hidden] { display: none; }
   </style>
   <script src="./vendor/jsqr/jsQR.js"></script>
   <script type="importmap">
@@ -28,6 +33,7 @@
 </head>
 <body>
   <div id="ar"></div>
+  <button id="stop" hidden>Stop camera</button>
   <div id="start">
     <h1>AR Card</h1>
     <p>Allow camera access, then point your phone at the card.</p>
@@ -261,20 +267,54 @@
       }
     };
 
+    // The camera runs only while someone is using it: it turns off when the page is hidden (tab switched,
+    // phone locked), when Stop is tapped, or after IDLE_MS with no card in view. mindar.stop() stops the
+    // camera tracks; turning it back on reloads the page so tracking starts fresh.
+    const IDLE_MS = 60000;
     const startEl = document.querySelector('#start'), msg = document.querySelector('#msg');
-    document.querySelector('#go').addEventListener('click', async () => {
+    const startText = document.querySelector('#start p'), goBtn = document.querySelector('#go');
+    const stopBtn = document.querySelector('#stop');
+    let running = false, stopped = false, resumeOnShow = false, qrTimer = 0, idleTimer = 0;
+    const armIdle = () => { clearTimeout(idleTimer); idleTimer = setTimeout(() => stopCamera('The camera turned off because no card was in view.'), IDLE_MS); };
+    anchor.onTargetFound = () => clearTimeout(idleTimer);
+    anchor.onTargetLost = armIdle;
+    const stopCamera = text => {
+      if (!running) return;
+      running = false; stopped = true;
+      clearInterval(qrTimer); clearTimeout(idleTimer);
+      renderer.setAnimationLoop(null);
+      try { mindar.stop(); } catch (e) { console.error(e); }
+      document.querySelectorAll('.mindar-ui-overlay').forEach(el => el.classList.add('hidden'));
+      stopBtn.hidden = true;
+      startText.textContent = text;
+      goBtn.textContent = 'Turn camera on';
+      msg.textContent = '';
+      startEl.style.display = '';
+    };
+    stopBtn.addEventListener('click', () => stopCamera('The camera is off.'));
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && running) { stopCamera('The camera is paused.'); resumeOnShow = true; }
+      else if (!document.hidden && resumeOnShow) location.replace(`?card=${cardId}&autostart`);
+    });
+    window.addEventListener('pagehide', () => stopCamera('The camera is paused.'));
+
+    goBtn.addEventListener('click', async () => {
+      if (stopped) { location.replace(`?card=${cardId}&autostart`); return; }
       msg.textContent = '';
       try {
         await mindar.start();
-        startEl.remove();
+        running = true;
+        startEl.style.display = 'none';
+        stopBtn.hidden = false;
         renderer.setAnimationLoop(() => { animate(); renderer.render(scene, camera); });
-        setInterval(() => checkQr().catch(console.error), 700);
+        qrTimer = setInterval(() => checkQr().catch(console.error), 700);
+        armIdle();
       } catch (e) {
         msg.textContent = 'Could not open the camera. Check camera permission and try again.';
         console.error(e);
       }
     });
-    if (new URLSearchParams(location.search).has('autostart')) document.querySelector('#go').click();
+    if (new URLSearchParams(location.search).has('autostart')) goBtn.click();
   </script>
 </body>
 </html>
