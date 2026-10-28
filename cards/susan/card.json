@@ -1,0 +1,37 @@
+{
+  "name": "Susan",
+  "title": "",
+  "lines": [],
+  "seed": 20261028,
+  "url": "https://willmore-pixel.github.io/AR-card/?card=susan",
+  "cube": ["#E8336E", "#E8336E", "#3E8E4A", "#3E8E4A", "#F48FB1", "#8BC28C"],
+  "edge": "#1F3B2A",
+  "object": {
+    "type": "neon",
+    "src": "assets/susan/hibiscus.png",
+    "color": "#FF5C93",
+    "core": "#FFF0F5",
+    "side": "#C2185B",
+    "upright": true,
+    "depth_mm": 2,
+    "size_mm": 30,
+    "spin": {"period": 6.5, "turn": 3}
+  },
+  "theme": {
+    "bg": "#FFF6F8",
+    "ink": "#1F3B2A",
+    "palette": ["#E8336E", "#F48FB1", "#3E8E4A", "#8BC28C", "#FF6F61", "#E8336E"],
+    "kinds": ["flower", "flower", "leaf", "leaf", "circle", "ring", "half"],
+    "scale": 1.5,
+    "count": 160,
+    "plate_stroke": "#3E8E4A",
+    "panel_stroke": "#3E8E4A",
+    "panel": [3.5, 67.4, 43.8, 16.0],
+    "name_font": "Caladea, 'Liberation Serif', Georgia, serif",
+    "name_size": 6.5,
+    "name_weight": 700,
+    "rule_color": "#E8336E",
+    "name_y": 9.0,
+    "rule_y": 12.4
+  }
+}

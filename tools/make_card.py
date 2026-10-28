@@ -114,6 +114,16 @@ def shape(kind, x, y, s, rot, color):
         return (f'<g {t}><circle cx="0" cy="{-s*0.28:.2f}" r="{s*0.16:.2f}" fill="none" stroke="{color}" stroke-width="{s*0.08:.2f}"/>'
                 f'<ellipse cx="0" cy="{s*0.02:.2f}" rx="{s*0.42:.2f}" ry="{s*0.14:.2f}" fill="{color}"/>'
                 f'<ellipse cx="0" cy="{s*0.25:.2f}" rx="{s*0.13:.2f}" ry="{s*0.18:.2f}" fill="{color}"/></g>')
+    # Floral motifs
+    if kind == "flower":
+        r = s / 2
+        petals = "".join(f'<ellipse cx="0" cy="{-r*0.5:.2f}" rx="{r*0.33:.2f}" ry="{r*0.5:.2f}" transform="rotate({a})" fill="{color}"/>'
+                         for a in range(0, 360, 72))
+        return f'<g {t}>{petals}<circle r="{r*0.2:.2f}" fill="{BG}"/></g>'
+    if kind == "leaf":
+        r = s / 2
+        return (f'<g {t}><path d="M{-r:.2f},0 Q0,{-r*0.75:.2f} {r:.2f},0 Q0,{r*0.75:.2f} {-r:.2f},0 Z" fill="{color}"/>'
+                f'<path d="M{-r*0.8:.2f},0 L{r*0.75:.2f},0" stroke="{BG}" stroke-width="{s*0.04:.2f}"/></g>')
     if kind == "plus":
         a, b = s * 0.5, s * 0.14
         return (f'<path {t} d="M{-a:.2f},{-b:.2f}H{a:.2f}V{b:.2f}H{-a:.2f}Z M{-b:.2f},{-a:.2f}H{b:.2f}V{a:.2f}H{-b:.2f}Z" '
