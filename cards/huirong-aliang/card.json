@@ -4,7 +4,14 @@
   "lines": [],
   "seed": 20261029,
   "url": "https://willmore-pixel.github.io/AR-card/?card=huirong-aliang",
-  "cube": ["#1E4F9E", "#1268AE", "#1E4F9E", "#1268AE", "#52B3D9", "#163F80"],
+  "cube": [
+    "#1E4F9E",
+    "#1268AE",
+    "#1E4F9E",
+    "#1268AE",
+    "#52B3D9",
+    "#163F80"
+  ],
   "edge": "#0B2E66",
   "object": {
     "type": "cube",
@@ -12,21 +19,57 @@
     "faces": {
       "top": "assets/huirong/cube-top.png",
       "bottom": "assets/huirong/cube-bottom.png",
-      "sides": ["assets/huirong/cube-s.png", "assets/huirong/cube-m.png", "assets/huirong/cube-s.png", "assets/huirong/cube-m.png"]
+      "sides": [
+        "assets/huirong/cube-s.png",
+        "assets/huirong/cube-m.png",
+        "assets/huirong/cube-s.png",
+        "assets/huirong/cube-m.png"
+      ]
     },
-    "spin": {"period": 6.5, "turn": 3}
+    "spin": {
+      "period": 6.5,
+      "turn": 3
+    },
+    "edges": false
   },
   "theme": {
     "bg": "#F4F8FC",
     "ink": "#123464",
-    "palette": ["#1E4F9E", "#1268AE", "#52B3D9", "#F2A86B", "#1A1A1A", "#52B3D9"],
-    "kinds": ["square", "circle", "ring", "bar", "plus", "tri"],
+    "palette": [
+      "#1E4F9E",
+      "#1268AE",
+      "#52B3D9",
+      "#F2A86B",
+      "#1A1A1A",
+      "#52B3D9"
+    ],
+    "kinds": [
+      "square",
+      "circle",
+      "ring",
+      "bar",
+      "plus",
+      "tri"
+    ],
     "scale": 1.2,
     "count": 200,
     "plate_stroke": "#1E4F9E",
     "panel_stroke": "#1E4F9E",
-    "panel": [3.5, 71.4, 43.8, 13.5],
-    "logo": {"src": "assets/huirong/face.png", "box": [11.4, 42.5, 28.0, 26.5]},
+    "panel": [
+      3.5,
+      71.4,
+      43.8,
+      13.5
+    ],
+    "logo": {
+      "src": "assets/huirong/face.png",
+      "box": [
+        11.4,
+        42.5,
+        28.0,
+        26.5
+      ]
+    },
     "name_font": "'WenQuanYi Zen Hei', 'Noto Sans CJK TC', 'Microsoft JhengHei', sans-serif",
     "name_size": 6.2,
     "name_weight": 700,

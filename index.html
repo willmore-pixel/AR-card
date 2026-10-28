@@ -187,7 +187,8 @@
       // "size_mm" sizes a cube too (default 18 mm); a neon sign that failed to load falls back to the default size
       const k = neon ? CUBE : (obj.size_mm || 18) / CARD_W;
       const geo = new THREE.BoxGeometry(k, k, k);
-      // "faces": {"top": img, "bottom": img, "sides": [img x4]} textures the cube instead of plain colors.
+      // "faces": {"top": img, "bottom": img, "sides": [img x4]} textures the cube instead of plain colors;
+      // the sides go around the cube in order.
       // The box is stood up so the images' up points along the card normal; its +y face becomes the top.
       let mats = faces;
       if (obj.faces) {
@@ -196,12 +197,13 @@
           t.colorSpace = THREE.SRGBColorSpace;
           return new THREE.MeshStandardMaterial({ map: t, roughness: 0.55, emissive: '#ffffff', emissiveMap: t, emissiveIntensity: 0.3 });
         });
-        mats = await Promise.all([sides[0], sides[1], f.top, f.bottom, sides[2], sides[3]].map((src, i) => src ? load(src) : faces[i]))
+        mats = await Promise.all([sides[0], sides[2], f.top, f.bottom, sides[3], sides[1]].map((src, i) => src ? load(src) : faces[i]))
           .catch(e => { console.error('cube textures failed, using colors', e); return faces; });
         geo.rotateX(Math.PI / 2);
       }
       item = new THREE.Mesh(geo, mats);
-      item.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat));
+      // "edges": false leaves off the outline
+      if (obj.edges !== false) item.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat));
       base = k / 2;
     }
     item.position.z = base;
